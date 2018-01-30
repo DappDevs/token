@@ -1,6 +1,11 @@
 TARGETS=DappDevToken.sol
 contracts.json: $(TARGETS)
-	solc --combined-json abi,bin,bin-runtime $^ > $@
+	solc --optimize --combined-json abi,bin,bin-runtime $^ > $@
 
 contracts.min.json: contracts.json | $(TARGETS)
 	python3 minify_contracts.py $< $| > $@
+
+.PHONY: clean
+clean:
+	rm -f contracts.json
+	rm -f contracts.min.json
