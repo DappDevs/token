@@ -21,6 +21,7 @@ contract DappDevMint
 
   mapping(address => Proposal) newMintProposals;
   mapping(address => Proposal) newDelegateProposals;
+  mapping(address => Proposal) newOwnerProposals;
 
   function DappDevMint(address _token)
     public
@@ -83,6 +84,35 @@ contract DappDevMint
   {
       require(isOwnerOrDelegate(msg.sender));
       assert(token.mint(_to, _amount));
+  }
+
+  function voteNewOwner(address newOwner, bool yayVote)
+    public
+  {
+    require(isOwner(msg.sender));
+    // Sender hasn't already proposed this
+    require(!newOwnerProposals[newOwner].proposed[msg.sender]);
+    // Add votes for this proposal
+    newOwnerProposals[newOwner].proposed[msg.sender] = true;
+    if (yayVote)
+    {
+      newOwnerProposals[newOwner].yayVotes += 1;
+      // If majority votes to accept this, add to delegates and remove this
+      if (newOwnerProposals[newOwner].yayVotes > owners.length/2)
+      {
+        owners.push(newOwner);
+        delete newOwnerProposals[newOwner];
+      }
+    }
+    else
+    {
+      newOwnerProposals[newOwner].nayVotes += 1;
+      // If majority votes to reject this, remove from proposals
+      if (newOwnerProposals[newOwner].nayVotes > owners.length/2)
+      {
+        delete newOwnerProposals[newOwner];
+      }
+    }
   }
 
   function voteNewDelegate(address newDelegate, bool yayVote)
