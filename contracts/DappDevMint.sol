@@ -30,6 +30,12 @@ contract DappDevMint
     owners.push(msg.sender);
   }
 
+  function acceptOwnership()
+    public
+  {
+    token.acceptOwnership();
+  }
+
   /**
    * @dev Modifier to check for access control rights
    * @param candidate The address to check for ownership access rights
