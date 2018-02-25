@@ -1,4 +1,5 @@
-TARGETS=DappDevToken.sol
+TARGETS =contracts/DappDevToken.sol
+TARGETS+=contracts/DappDevMint.sol
 contracts.json: $(TARGETS)
 	solc --optimize --combined-json abi,bin,bin-runtime $^ > $@
 
