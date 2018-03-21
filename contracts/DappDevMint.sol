@@ -7,27 +7,17 @@ contract DappDevMint
   /* DappDevToken address */
   DappDevToken public token;
 
-  /* addresses that have authority to mint and change delegates */
-  address[] public owners;
+  /* address that have authority to change delegates */
+  address public owner;
 
   /* addresses that have authority to mint */
   address[] public delegates;
-
-  struct Proposal {
-      mapping(address => bool) proposed;
-      uint yayVotes;
-      uint nayVotes;
-  }
-
-  mapping(address => Proposal) newMintProposals;
-  mapping(address => Proposal) newDelegateProposals;
-  mapping(address => Proposal) newOwnerProposals;
 
   function DappDevMint(address _token)
     public
   {
     token = DappDevToken(_token);
-    owners.push(msg.sender);
+    owner = msg.sender;
   }
 
   function acceptOwnership()
@@ -46,11 +36,9 @@ contract DappDevMint
     view
     returns (bool)
   {
-    // Search through owners list
-    for (uint i = 0; i < owners.length; i++)
-      if (candidate == owners[i])
-        // Return true if candidate is owner
-        return true;
+    if (candidate == owner)
+      // Return true if candidate is owner
+      return true;
 
     // Not an owner
     return false;
@@ -59,17 +47,13 @@ contract DappDevMint
   /**
    * @dev Modifier to check for access control rights
    * @param candidate The address to check for ownership access rights
-   * @return A boolean that indicates if the candidate is an owner
+   * @return A boolean that indicates if the candidate is a delegate
    */
-  function isOwnerOrDelegate(address candidate)
+  function isDelegate(address candidate)
     public
     view
     returns (bool)
   {
-    // Check if an owner first
-    if (isOwner(candidate))
-      return true;
-
     // Search through delegates list
     for (uint i = 0; i < delegates.length; i++)
       if (candidate == delegates[i])
@@ -80,102 +64,93 @@ contract DappDevMint
     return false;
   }
 
+
   /**
    * @dev Function to mint tokens
    * @param _to The address that will receive the minted tokens.
+   * @param minterIndex The index of the minter in the delegates array
    * @param _amount The amount of tokens to mint.
    */
-  function mint(address _to, uint256 _amount)
+  function mint(address _to, uint minterIndex, uint256 _amount)
     public
   {
-      require(isOwnerOrDelegate(msg.sender));
+      require(msg.sender == findByIndex(minterIndex));
       assert(token.mint(_to, _amount));
   }
 
-  function voteNewOwner(address newOwner, bool yayVote)
-    public
-  {
-    require(isOwner(msg.sender));
-    // Sender hasn't already proposed this
-    require(!newOwnerProposals[newOwner].proposed[msg.sender]);
-    // Add votes for this proposal
-    newOwnerProposals[newOwner].proposed[msg.sender] = true;
-    if (yayVote)
-    {
-      newOwnerProposals[newOwner].yayVotes += 1;
-      // If majority votes to accept this, add to delegates and remove this
-      if (newOwnerProposals[newOwner].yayVotes > owners.length/2)
-      {
-        owners.push(newOwner);
-        delete newOwnerProposals[newOwner];
-      }
-    }
-    else
-    {
-      newOwnerProposals[newOwner].nayVotes += 1;
-      // If majority votes to reject this, remove from proposals
-      if (newOwnerProposals[newOwner].nayVotes > owners.length/2)
-      {
-        delete newOwnerProposals[newOwner];
-      }
-    }
+  /**
+   * @dev Function Change ownership on the faucet token
+   * @param newOwner The address that will become the new owner
+   */
+   function transferTokenOwnership(address newOwner) public {
+       require(isOwner(msg.sender));
+       token.transferOwnership(newOwner);
+   }
+
+
+  /**
+   * @dev Function add minters/delegates
+   * @param newDelegate The address that will be allowed to mint tokens.
+   */
+   function addDelegate(address newDelegate) public {
+      //only owner can add delegate
+      require(isOwner(msg.sender));
+      // don't add if already there
+      if (!isDelegate(newDelegate))
+         delegates.push(newDelegate);
   }
 
-  function voteNewDelegate(address newDelegate, bool yayVote)
-    public
-  {
-    require(isOwner(msg.sender));
-    // Sender hasn't already proposed this
-    require(!newDelegateProposals[newDelegate].proposed[msg.sender]);
-    // Add votes for this proposal
-    newDelegateProposals[newDelegate].proposed[msg.sender] = true;
-    if (yayVote)
-    {
-      newDelegateProposals[newDelegate].yayVotes += 1;
-      // If majority votes to accept this, add to delegates and remove this
-      if (newDelegateProposals[newDelegate].yayVotes > owners.length/2)
-      {
-        delegates.push(newDelegate);
-        delete newDelegateProposals[newDelegate];
-      }
-    }
-    else
-    {
-      newDelegateProposals[newDelegate].nayVotes += 1;
-      // If majority votes to reject this, remove from proposals
-      if (newDelegateProposals[newDelegate].nayVotes > owners.length/2)
-      {
-        delete newDelegateProposals[newDelegate];
-      }
-    }
+  /**
+   * @dev Function remove existing minters/delegates
+   * @param oldDelegate The address that will be removed
+   */
+   function removeDelegate(address oldDelegate) public {
+      require(isOwner(msg.sender));
+      require(isDelegate(oldDelegate));
+      removeByValue(oldDelegate);
   }
 
-  function voteNewTokenMint(address newMint, bool yayVote)
-    public
-  {
-    require(isOwner(msg.sender));
-    // Sender hasn't already proposed this
-    require(!newMintProposals[newMint].proposed[msg.sender]);
-    // Add votes for this proposal
-    newMintProposals[newMint].proposed[msg.sender] = true;
-    if (yayVote)
-    {
-      newMintProposals[newMint].yayVotes += 1;
-      // If majority votes to accept this, transfer ownership of token to that address, and destroy this one
-      if (newMintProposals[newMint].yayVotes > owners.length/2)
-      {
-        token.transferOwnership(newMint);
-        selfdestruct(newMint);
-      }
+
+    // helper functions for working with delegate array
+    /**
+     * @dev Function Find delegate by address
+     * @param delegate Address to find
+     */
+    function find(address delegate) public constant returns(uint) {
+        uint i = 0;
+        while (delegates[i] != delegate && i < delegates.length) {
+            i++;
+        }
+        return i; //@todo test and handle when address is NOT in array
     }
-    else
-    {
-      newMintProposals[newMint].nayVotes += 1;
-      // If majority votes to reject this, remove from proposals
-      if (newMintProposals[newMint].nayVotes > owners.length/2)
-      {
-        delete newMintProposals[newMint];
-      }
+
+    /**
+     * @dev Function return address based on index
+     * @param index Index of delegate addresses to find
+     * @return address The address of delegate at index
+     */
+    function findByIndex(uint index) private constant returns(address) {
+        return delegates[index];
     }
-  }
+
+    /**
+     * @dev Function remove address delegate array by address
+     * @param delegate Delegate address
+     */
+    function removeByValue(address delegate) private {
+        uint i = find(delegate);
+        removeByIndex(i);
+    }
+
+    /**
+     * @dev Function remove from array by index removeByValue
+     * @param i Index to removeByIndex
+     */
+    function removeByIndex(uint i) private {
+        while (i<delegates.length-1) {
+            delegates[i] = delegates[i+1];
+            i++;
+        }
+        delegates.length--;
+    }
 }
