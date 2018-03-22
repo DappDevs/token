@@ -51,20 +51,6 @@ contract DappDevMint
   }
 
   /**
-   * @dev Modifier to check for access control rights
-   * @param candidate The address to check for ownership access rights
-   * @return A boolean that indicates if the candidate is a delegate
-   */
-  function isDelegate(address candidate)
-    public
-    view
-    returns (bool)
-  {
-    return canMint[candidate];
-  }
-
-
-  /**
    * @dev Function to mint tokens
    * @param _to The address that will receive the minted tokens.
    * @param _amount The amount of tokens to mint.
