@@ -1,4 +1,4 @@
-pragma solidity ^0.4.19;
+pragma solidity ^0.4.21;
 
 import "./DappDevToken.sol";
 
@@ -7,28 +7,24 @@ contract DappDevMint
   /* DappDevToken address */
   DappDevToken public token;
 
-  /* addresses that have authority to mint and change delegates */
-  address[] public owners;
+  /* address that have authority to change delegates */
+  address public owner;
 
   /* addresses that have authority to mint */
-  address[] public delegates;
-
-  struct Proposal {
-      mapping(address => bool) proposed;
-      uint yayVotes;
-      uint nayVotes;
-  }
-
-  mapping(address => Proposal) newMintProposals;
-  mapping(address => Proposal) newDelegateProposals;
-  mapping(address => Proposal) newOwnerProposals;
-
+  mapping (address => bool) public canMint;
+  
+  /* Event for minter access control */
+  event AccessControl(address minter, bool granted);
+  
+  
   function DappDevMint(address _token)
     public
   {
     token = DappDevToken(_token);
-    owners.push(msg.sender);
+    owner = msg.sender;
+    canMint[msg.sender] = true;
   }
+
 
   function acceptOwnership()
     public
@@ -46,37 +42,11 @@ contract DappDevMint
     view
     returns (bool)
   {
-    // Search through owners list
-    for (uint i = 0; i < owners.length; i++)
-      if (candidate == owners[i])
-        // Return true if candidate is owner
-        return true;
-
-    // Not an owner
-    return false;
-  }
-
-  /**
-   * @dev Modifier to check for access control rights
-   * @param candidate The address to check for ownership access rights
-   * @return A boolean that indicates if the candidate is an owner
-   */
-  function isOwnerOrDelegate(address candidate)
-    public
-    view
-    returns (bool)
-  {
-    // Check if an owner first
-    if (isOwner(candidate))
+    if (candidate == owner)
+      // Return true if candidate is owner
       return true;
 
-    // Search through delegates list
-    for (uint i = 0; i < delegates.length; i++)
-      if (candidate == delegates[i])
-        // Return true if candidate is delegate
-        return true;
-
-    // Not an owner or delegate
+    // Not an owner
     return false;
   }
 
@@ -88,94 +58,40 @@ contract DappDevMint
   function mint(address _to, uint256 _amount)
     public
   {
-      require(isOwnerOrDelegate(msg.sender));
+      require(canMint[msg.sender]);
       assert(token.mint(_to, _amount));
   }
 
-  function voteNewOwner(address newOwner, bool yayVote)
-    public
-  {
-    require(isOwner(msg.sender));
-    // Sender hasn't already proposed this
-    require(!newOwnerProposals[newOwner].proposed[msg.sender]);
-    // Add votes for this proposal
-    newOwnerProposals[newOwner].proposed[msg.sender] = true;
-    if (yayVote)
-    {
-      newOwnerProposals[newOwner].yayVotes += 1;
-      // If majority votes to accept this, add to delegates and remove this
-      if (newOwnerProposals[newOwner].yayVotes > owners.length/2)
-      {
-        owners.push(newOwner);
-        delete newOwnerProposals[newOwner];
-      }
-    }
-    else
-    {
-      newOwnerProposals[newOwner].nayVotes += 1;
-      // If majority votes to reject this, remove from proposals
-      if (newOwnerProposals[newOwner].nayVotes > owners.length/2)
-      {
-        delete newOwnerProposals[newOwner];
-      }
-    }
+  /**
+   * @dev Function Change ownership on the faucet token
+   * @param newOwner The address that will become the new owner
+   */
+   function transferTokenOwnership(address newOwner) public {
+       require(isOwner(msg.sender));
+       token.transferOwnership(newOwner);
+   }
+
+
+  /**
+   * @dev Function add minters/delegates
+   * @param newDelegate The address that will be allowed to mint tokens.
+   */
+   function addDelegate(address newDelegate) public {
+      //only owner can add delegate
+      require(isOwner(msg.sender));
+      canMint[newDelegate] = true;
+      emit AccessControl(newDelegate, true);
   }
 
-  function voteNewDelegate(address newDelegate, bool yayVote)
-    public
-  {
-    require(isOwner(msg.sender));
-    // Sender hasn't already proposed this
-    require(!newDelegateProposals[newDelegate].proposed[msg.sender]);
-    // Add votes for this proposal
-    newDelegateProposals[newDelegate].proposed[msg.sender] = true;
-    if (yayVote)
-    {
-      newDelegateProposals[newDelegate].yayVotes += 1;
-      // If majority votes to accept this, add to delegates and remove this
-      if (newDelegateProposals[newDelegate].yayVotes > owners.length/2)
-      {
-        delegates.push(newDelegate);
-        delete newDelegateProposals[newDelegate];
-      }
-    }
-    else
-    {
-      newDelegateProposals[newDelegate].nayVotes += 1;
-      // If majority votes to reject this, remove from proposals
-      if (newDelegateProposals[newDelegate].nayVotes > owners.length/2)
-      {
-        delete newDelegateProposals[newDelegate];
-      }
-    }
+  /**
+   * @dev Function remove existing minters/delegates
+   * @param oldDelegate The address that will be removed
+   */
+   function removeDelegate(address oldDelegate) public {
+      require(isOwner(msg.sender));
+      canMint[oldDelegate] = false;
+      emit AccessControl(oldDelegate, false);
   }
 
-  function voteNewTokenMint(address newMint, bool yayVote)
-    public
-  {
-    require(isOwner(msg.sender));
-    // Sender hasn't already proposed this
-    require(!newMintProposals[newMint].proposed[msg.sender]);
-    // Add votes for this proposal
-    newMintProposals[newMint].proposed[msg.sender] = true;
-    if (yayVote)
-    {
-      newMintProposals[newMint].yayVotes += 1;
-      // If majority votes to accept this, transfer ownership of token to that address, and destroy this one
-      if (newMintProposals[newMint].yayVotes > owners.length/2)
-      {
-        token.transferOwnership(newMint);
-        selfdestruct(newMint);
-      }
-    }
-    else
-    {
-      newMintProposals[newMint].nayVotes += 1;
-      // If majority votes to reject this, remove from proposals
-      if (newMintProposals[newMint].nayVotes > owners.length/2)
-      {
-        delete newMintProposals[newMint];
-      }
-    }
-  }
+
 }
